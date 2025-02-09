@@ -27,6 +27,7 @@ LogMessage *log_queue_head = NULL;
 LogMessage *log_queue_tail = NULL;
 int log_queue_size = 0;
 int log_thread_running = 1;
+pthread_t log_thread = NULL;
 
 void rotate_logs(const char *log_file) {
     char old_log[256];
@@ -165,7 +166,6 @@ void log_message(LogType type, const char *format, ...) {
 }
 
 void start_log_thread() {
-    pthread_t log_thread;
     pthread_create(&log_thread, NULL, log_thread_func, NULL);
     printf("Log thread started.\n");
 }
@@ -175,5 +175,8 @@ void stop_log_thread() {
     log_thread_running = 0;
     pthread_cond_signal(&log_cond);
     pthread_mutex_unlock(&log_mutex);
+
+    pthread_join(log_thread, NULL);
+
     printf("Log thread stopped.\n");
 }
