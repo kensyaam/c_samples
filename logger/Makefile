@@ -1,0 +1,53 @@
+# コンパイラ
+CC = gcc
+
+# コンパイルオプション
+CFLAGS = -Wall -Wextra -O2 -Iinclude
+
+# ライブラリリンクオプション (-L<dir>で検索場所追加)
+#LDFLAGS = -l<lib>
+
+OBJ_DIR = build/obj
+BIN_DIR = build/bin
+
+# ターゲット実行ファイル
+EXE = $(BIN_DIR)/sample
+
+# ソースファイル
+SRCS += $(wildcard src/*.c)
+
+# オブジェクトファイル
+#OBJS = $(SRCS:.c=.o)
+OBJS = $(patsubst src/%.c, $(OBJ_DIR)/%.o, $(SRCS))
+
+# デフォルトターゲット
+all: $(EXE) $(EXE)_th
+
+# 実行ファイルの生成
+# $(EXE): $(OBJS)
+$(EXE): build/obj/main.o build/obj/logger.o
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+$(EXE)_th: build/obj/main.o build/obj/logger_th.o
+	@mkdir -p $(BIN_DIR)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# オブジェクトファイルの生成
+#%.o: %.c
+$(OBJ_DIR)/%.o: src/%.c
+	@mkdir -p $(OBJ_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# クリーンアップ
+clean:
+	rm -f $(OBJS) $(EXE) $(EXE)_th
+
+# テストの実行
+test: $(EXE)
+	@for test in tests/*.c; do \
+	    $(CC) $(CFLAGS) $$test -o $${test%.c}.out && $${test%.c}.out; \
+	done
+
+# .PHONYターゲット
+.PHONY: all clean test
