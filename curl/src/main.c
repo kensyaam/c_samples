@@ -41,7 +41,7 @@ json_t* get_json_from_url(const char* url) {
     curl_easy_setopt(curl_handle, CURLOPT_URL, url);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&chunk);
-
+    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 10L); // タイムアウト時間を10秒に設定
     res = curl_easy_perform(curl_handle);
 
     if(res != CURLE_OK) {
