@@ -31,7 +31,6 @@ extern pthread_t log_thread;
 
 void rotate_logs(const char *log_file);
 void *log_thread_func(void *arg);
-void log_message(LogType type, const char *format, ...);
 #endif
 
 #endif

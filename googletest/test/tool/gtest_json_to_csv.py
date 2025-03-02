@@ -8,6 +8,18 @@ def extract_date(timestamp):
     return date_part.replace("-", "/")  # YYYY-MM-DD → YYYY/MM/DD に変換
 
 def parse_gtest_json(json_file, output_file, delimiter=","):
+    write_encoding = "utf-8"
+
+    # delimiterが","の場合、 output_fileの拡張子がcsvでない場合はcsvに変更
+    if delimiter == ",":
+        write_encoding = "utf-8-sig"
+        if not output_file.lower().endswith(".csv"):
+            output_file += ".csv"
+
+    # delimiterが"\t"の場合、 output_fileの拡張子がtsvでない場合はtsvに変更
+    if delimiter == "\t" and not output_file.lower().endswith(".tsv"):
+        output_file += ".tsv"
+
     # output_fileを一旦削除
     with open(output_file, "w", encoding="utf-8"):
         pass
@@ -21,9 +33,8 @@ def parse_gtest_json(json_file, output_file, delimiter=","):
         test_date = extract_date(data["timestamp"])
 
     # CSVのヘッダ
-    headers = ["Test Suite", "Test Case", "Status", "Date", "Message"]
-
-    summary_headers = ["Test Suite", "Total Tests", "Failures", "Disabled"]
+    summary_headers = ["Target", "Test Suite", "Total Tests", "Failures", "Disabled"]
+    headers = ["Test Suite", "Test", "Status", "Date", "Overview", "Failure"]
 
     # 各テストスイートの情報を取得
     for testsuite in data.get("testsuites", []):
@@ -34,25 +45,40 @@ def parse_gtest_json(json_file, output_file, delimiter=","):
         total_tests = testsuite.get("tests", 0)
         total_failures = testsuite.get("failures", 0)
         total_disabled = testsuite.get("disabled", 0)
+        ts_target = testsuite.get("target", "undefined")
 
         # サマリー情報を追加
-        summary_rows.append([suite_name, total_tests, total_failures, total_disabled])
+        summary_rows.append([ts_target, suite_name, total_tests, total_failures, total_disabled])
 
-        # 各テストケースを処理
-        for testcase in testsuite.get("testsuite", []):
-            case_name = testcase.get("name", "Unknown Case")
+        # 各テストを処理
+        for test in testsuite.get("testsuite", []):
+            test_name = test.get("name", "Unknown")
             status = "PASSED"
-            message = ""
 
             # 失敗時の処理
-            if "failures" in testcase and testcase["failures"]:
+            message = ""
+            if "failures" in test and test["failures"]:
                 status = "FAILED"
-                message = testcase["failures"][0].get("message", "").strip()
+                message = test["failures"][0].get("failure", "").strip()
 
-            rows.append([suite_name, case_name, status, test_date, message])
+                if delimiter == "\t":
+                    # 改行をエスケープ
+                    # message = message.replace("\n", "\\n")
+                    pass
+
+            # 概要（カスタムフィールド）
+            test_overview = test.get("overview", "undefined")
+            test_overview = test_overview.encode("latin-1").decode("utf-8")
+
+            if delimiter == "\t":
+                # 改行をエスケープ
+                # overview = message.replace("\n", "\\n")
+                pass
+
+            rows.append([suite_name, test_name, status, test_date, test_overview, message])
 
         # CSV/TSVに保存
-        with open(output_file, "a", newline="", encoding="utf-8") as f:
+        with open(output_file, "a", newline="", encoding=write_encoding) as f:
             writer = csv.writer(f, delimiter=delimiter)
 
             # サマリー情報を書き込む
@@ -61,8 +87,8 @@ def parse_gtest_json(json_file, output_file, delimiter=","):
             writer.writerows(summary_rows)
             writer.writerow([])  # 空行
 
-            # テストケース詳細情報を書き込む
-            writer.writerow(["Test Case Details"])
+            # テスト詳細情報を書き込む
+            writer.writerow(["Test Details"])
             writer.writerow(headers)
             writer.writerows(rows)
             writer.writerow([])  # 空行

@@ -15,7 +15,7 @@ LogMessage *log_queue_head = NULL;
 LogMessage *log_queue_tail = NULL;
 int log_queue_size = 0;
 int log_thread_running = 1;
-pthread_t log_thread = NULL;
+pthread_t log_thread;
 
 void rotate_logs(const char *log_file) {
     char old_log[256];

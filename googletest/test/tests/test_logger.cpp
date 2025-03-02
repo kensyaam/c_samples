@@ -5,13 +5,19 @@
 #include "fff.h"
 
 extern "C" {
-#include "logger.h"
+// #include "logger.h"
+#include "../../src/logger.c"
+
+DEFINE_FFF_GLOBALS;
+
+// malloc のモック定義
+FAKE_VALUE_FUNC(void*, malloc_wrapped, size_t);
+FAKE_VALUE_FUNC(void*, remalloc_wrapped, void*, size_t);
+FAKE_VOID_FUNC(free_wrapped, void*);
 }
 
 #define TEST_LOG_FILE "test_logfile.log"
 
-// malloc のモック定義
-FAKE_VALUE_FUNC(void*, malloc_wrapped, size_t);
 
 // カスタム malloc の挙動
 int malloc_return_null = 0;
@@ -27,6 +33,11 @@ void* my_custom_malloc(size_t size) {
 
 class LoggerTest : public ::testing::Test {
 protected:
+    static void SetUpTestSuite() {
+        // レポートに出力するプロパティを設定
+        testing::Test::RecordProperty("target", "logger.c");
+    }
+
     virtual void SetUp(){
         printf("SetUp\n");
         RESET_FAKE(malloc_wrapped);
@@ -51,6 +62,8 @@ void remove_test_logs() {
 }
 
 TEST_F(LoggerTest, RotateLogs) {
+    // レポートに出力するプロパティを設定
+    testing::Test::RecordProperty("overview", "rotete_logs()のテスト");
     printf("%s\n", __func__);
     remove_test_logs();
 

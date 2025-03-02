@@ -8,18 +8,19 @@ BIN_DIR        = build/bin
 
 # ライブラリ用
 LIB_SRC_DIR    = src_lib
-LIB_OBJ_DIR    = build/obj_lib
+LIB_OBJ_DIR    = build/lib_obj
 LIB_DIR        = build/lib
 
 # UT用
 UT_FW_DIR      = test/fw
 UT_SRC_DIR     = test/tests
-UT_OBJ_DIR     = build/obj_test
+UT_OBJ_DIR     = build/test_obj
+UT_BIN_DIR     = build/test_bin
 UT_REPORT_DIR  = build/report
 
 # スタブ用
 STUB_SRC_DIR   = test/stub
-STUB_OBJ_DIR   = build/obj_stub
+STUB_OBJ_DIR   = build/stub_obj
 
 ##########################################
 # ビルド用の変数
@@ -29,11 +30,15 @@ CC = gcc
 CXX = g++
 
 # コンパイルオプション (-I<dir>で検索場所追加)
-CFLAGS = -Wall -Wextra -O2 -I$(LIB_SRC_DIR)
+CFLAGS = -Wall -Wextra -O2
+# 自作ライブラリを使う場合
+# CFLAGS += -I$(LIB_SRC_DIR)
 
 # ライブラリリンクオプション (-L<dir>で検索場所追加)
 #   「-Wl,-rpath=build/lib」を付けない場合は、実行時にLD_LIBRARY_PATHを設定する必要がある
-LDFLAGS = -lpthread -lsample -L$(LIB_DIR) -Wl,-rpath=$(LIB_DIR)
+LDFLAGS = -lpthread
+# 自作ライブラリを使う場合
+# LDFLAGS += -lsample -L$(LIB_DIR) -Wl,-rpath=$(LIB_DIR)
 
 # ---------------------------------------------------
 # メインプログラム用
@@ -46,7 +51,7 @@ SRCS += $(wildcard $(SRC_DIR)/*.c)
 OBJS = $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(SRCS))
 
 # 実行ファイル（スタンドアローン用）
-EXE_WITH_STUB = $(BIN_DIR)/sample_with_stub
+EXE_WITH_STUB = $(EXE)_with_stub
 
 # ---------------------------------------------------
 # 共有ライブラリ用
@@ -61,13 +66,17 @@ LIB_OBJS = $(patsubst $(LIB_SRC_DIR)/%.c, $(LIB_OBJ_DIR)/%.o, $(LIB_SRCS))
 # ---------------------------------------------------
 # UT用
 # ---------------------------------------------------
-# 実行ファイル
-UT_EXE = $(BIN_DIR)/test
 # ソースファイル
 UT_SRCS = $(wildcard $(UT_SRC_DIR)/*.cpp)
 # オブジェクトファイル
 UT_OBJS = $(patsubst $(UT_SRC_DIR)/%.cpp, $(UT_OBJ_DIR)/%.o, $(UT_SRCS))
-UT_OBJS += $(wildcard $(UT_FW_DIR)/gtest/obj/*.o)
+# 実行ファイル
+UT_EXES = $(patsubst $(UT_SRC_DIR)/test_%.cpp, $(UT_BIN_DIR)/test_%, $(UT_SRCS))
+
+# コンパイルオプション
+UT_CFLAGS = -coverage -g -O0
+# リンクオプション
+UT_LDFLAGS = -lpthread -lgtest -lgtest_main -L$(UT_FW_DIR)/lib64 -Wl,-rpath=$(UT_FW_DIR)/lib64 -lgcov
 
 # ---------------------------------------------------
 # スタブ用
@@ -84,6 +93,7 @@ STUB_OBJS = $(patsubst $(STUB_SRC_DIR)/%.c, $(STUB_OBJ_DIR)/%.o, $(STUB_SRCS))
 # デフォルトターゲット
 #all: $(EXE) $(SHARED_LIB)
 all: $(EXE)
+.PHONY: all
 
 # ---------------------------------------------------
 # メインプログラム用
@@ -91,7 +101,7 @@ all: $(EXE)
 # 実行ファイルの生成
 $(EXE): $(OBJS)
 	@mkdir -p $(BIN_DIR)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) -o $@ $^ $(LDFLAGS)
 
 # オブジェクトファイルの生成
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
@@ -101,13 +111,14 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 # スタンドアローン用の実行ファイルの生成
 $(EXE_WITH_STUB): $(OBJS) $(STUB_OBJS)
 	@mkdir -p $(BIN_DIR)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) -o $@ $^ $(LDFLAGS)
 
 # ---------------------------------------------------
 # 共有ライブラリ用
 # ---------------------------------------------------
 # 共有ライブラリの生成
 lib: $(SHARED_LIB)
+.PHONY: lib
 
 $(SHARED_LIB): $(LIB_OBJS)
 	@mkdir -p $(LIB_DIR)
@@ -121,46 +132,64 @@ $(LIB_OBJ_DIR)/%.o: $(LIB_SRC_DIR)/%.c
 # ---------------------------------------------------
 # UT用
 # ---------------------------------------------------
-test: $(UT_EXE)
+test: $(UT_EXES)
 	@mkdir -p $(UT_REPORT_DIR)
-	-./$(UT_EXE) --gtest_output=json:$(UT_REPORT_DIR)/test_report.json
-	python test/tool/gtest_json_to_csv.py $(UT_REPORT_DIR)/test_report.json $(UT_REPORT_DIR)/test_report.tsv tsv
+	@for exe in $(UT_EXES); do \
+		exe_name=$$(basename $$exe); \
+		echo "Running $$exe"; \
+		$$exe --gtest_output=json:$(UT_REPORT_DIR)/$$exe_name.json; \
+		python test/tool/gtest_json_to_csv.py $(UT_REPORT_DIR)/$$exe_name.json $(UT_REPORT_DIR)/$$exe_name tsv; \
+	done
+	@echo "カバレッジ情報 ----------------------"
+	@lcov -q -d $(UT_OBJ_DIR) -c --rc lcov_branch_coverage=1 -o $(UT_REPORT_DIR)/lcov.info
+	@lcov -q --remove $(UT_REPORT_DIR)/lcov.info '/usr/*' '*/gtest/*' '*/test/tests/*' --rc lcov_branch_coverage=1 -o $(UT_REPORT_DIR)/CoreCoverage.info
+	@lcov -q --list $(UT_REPORT_DIR)/CoreCoverage.info --rc lcov_branch_coverage=1
+	@genhtml -q $(UT_REPORT_DIR)/CoreCoverage.info --branch-coverage -o $(UT_REPORT_DIR)/coverage
+	@echo "カバレッジ情報(html)を出力しました。 $(UT_REPORT_DIR)/coverage/index.html"
+.PHONY: test
 
-test_list: $(UT_EXE)
-	./$(UT_EXE) --gtest_list_tests
+test_build: $(UT_EXES)
+.PHONY: test_build
+
+test_list: $(UT_EXES)
+	@for exe in $(UT_EXES); do \
+		exe_name=$$(basename $$exe); \
+		echo "$$exe_name"; \
+		$$exe --gtest_list_tests; \
+	done
+.PHONY: test_list
 
 # UT用の実行ファイルの生成
-$(UT_EXE): $(UT_OBJS) $(OBJS)
-	@if [[ ! -f $(UT_FW_DIR)/gtest/gtest-all.cc ]]; then \
+$(UT_BIN_DIR)/test_%: $(UT_OBJ_DIR)/test_%.o
+	@if [[ ! -f $(UT_FW_DIR)/lib64/libgtest.a ]]; then \
 		echo "GoogleTestがセットアップされていません。make setup_testを実行してください。"; \
 		exit 1; \
 	fi
-	@mkdir -p $(BIN_DIR)
-	$(CXX) -o $@ $(filter-out $(OBJ_DIR)/main.o,$^) \
-		-I$(UT_FW_DIR) -lpthread $(LDFLAGS) 
+	@mkdir -p $(UT_BIN_DIR)
+	$(CXX) -o $@ $^ $(UT_LDFLAGS)
 
 # UT用のオブジェクトファイルの生成
 $(UT_OBJ_DIR)/%.o: $(UT_SRC_DIR)/%.cpp 
 	@mkdir -p $(UT_OBJ_DIR)
-	$(CXX) -c $< -o $@ -DUNIT_TEST -I$(UT_FW_DIR) -I$(SRC_DIR) -I$(LIB_SRC_DIR)
-
-# $(UT_FW_DIR)/gtest/gtest.o: $(UT_FW_DIR)/gtest/gtest-all.cc $(UT_FW_DIR)/googletest-release-1.11.0/googletest/src/gtest_main.cc
-# 	$(CXX) -c $^ -o $@ -I$(UT_FW_DIR)
+	$(CXX) $(UT_CFLAGS) -c $< -o $@ -DUNIT_TEST -I$(UT_FW_DIR)/include -I$(SRC_DIR) -I$(LIB_SRC_DIR)
 
 # GoogleTest、FFFをセットアップ
 setup_test:
 	@rm -rf $(UT_FW_DIR)/*
 	@mkdir -p $(UT_FW_DIR)
-	curl -OL https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip
-	unzip -o release-1.11.0.zip
-	rm release-1.11.0.zip
-	python googletest-release-1.11.0/googletest/scripts/fuse_gtest_files.py $(UT_FW_DIR)
-	mv -f googletest-release-1.11.0 $(UT_FW_DIR)/.
-	@mkdir -p $(UT_FW_DIR)/gtest/obj
-	$(CXX) -c $(UT_FW_DIR)/gtest/gtest-all.cc -o $(UT_FW_DIR)/gtest/obj/gtest-all.o -I$(UT_FW_DIR)
-	$(CXX) -c $(UT_FW_DIR)/googletest-release-1.11.0/googletest/src/gtest_main.cc -o $(UT_FW_DIR)/gtest/obj/gtest_main.o -I$(UT_FW_DIR)
-	curl -OL https://github.com/meekrosoft/fff/releases/download/v1.1/fff.h
-	mv -f fff.h $(UT_FW_DIR)/.
+	@cd $(UT_FW_DIR) && \
+		curl -OL https://github.com/google/googletest/releases/download/v1.16.0/googletest-1.16.0.tar.gz && \
+		tar -zxvf googletest-1.16.0.tar.gz && \
+		rm googletest-1.16.0.tar.gz && \
+		mkdir -p googletest-1.16.0/build && \
+		cd googletest-1.16.0/build && \
+		cmake -DCMAKE_INSTALL_PREFIX=../.. .. && \
+		make && make install && \
+		cd ../.. && rm -rf googletest-1.16.0
+	@cd $(UT_FW_DIR) && \
+		curl -L https://github.com/meekrosoft/fff/releases/download/v1.1/fff.h -o include/fff.h
+	@echo "GoogleTestとFFFのセットアップが完了しました。"
+.PHONY: setup_test
 
 # ---------------------------------------------------
 # スタブ用
@@ -173,7 +202,6 @@ $(STUB_OBJ_DIR)/%.o: $(STUB_SRC_DIR)/%.c
 # ---------------------------------------------------
 # クリーンアップ
 clean:
-	find ./build -type f -delete
-
-# .PHONYターゲット
-.PHONY: all clean lib setup_test test test_list
+	# find ./build -type f -delete
+	rm -rf ./build/*
+.PHONY: clean
