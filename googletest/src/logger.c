@@ -85,22 +85,16 @@ void *log_thread_func(void *arg) {
                 continue;
         }
 
+        // Check the size of the log file
+        struct stat st;
+        if (stat(log_file, &st) == 0 && st.st_size >= MAX_LOG_SIZE) {
+            rotate_logs(log_file);
+        }
+
         FILE *file = fopen(log_file, "a");
         if (file == NULL) {
             free_wrapped(msg);
             continue;
-        }
-
-        // Check the size of the log file
-        struct stat st;
-        if (stat(log_file, &st) == 0 && st.st_size >= MAX_LOG_SIZE) {
-            fclose(file);
-            rotate_logs(log_file);
-            file = fopen(log_file, "a");
-            if (file == NULL) {
-                free_wrapped(msg);
-                continue;
-            }
         }
 
         // Write the log message
