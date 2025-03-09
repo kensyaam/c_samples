@@ -40,6 +40,13 @@ LDFLAGS = -lpthread
 # 自作ライブラリを使う場合
 # LDFLAGS += -lsample -L$(LIB_DIR) -Wl,-rpath=$(LIB_DIR)
 
+# echo用のエスケープシーケンス
+RED = \033[31m
+GREEN = \033[32m
+YELLOW = \033[33m
+BLUE = \033[34m
+RESET = \033[0m
+
 # ---------------------------------------------------
 # メインプログラム用
 # ---------------------------------------------------
@@ -107,6 +114,7 @@ all: $(EXE)
 $(EXE): $(OBJS)
 	@mkdir -p $(BIN_DIR)
 	$(CC) -o $@ $^ $(LDFLAGS)
+	@echo -e "$(GREEN)$@ を生成しました。$(RESET)"
 
 # オブジェクトファイルの生成
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
@@ -117,6 +125,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 $(EXE_WITH_STUB): $(OBJS) $(STUB_OBJS)
 	@mkdir -p $(BIN_DIR)
 	$(CC) -o $@ $^ $(LDFLAGS)
+	@echo -e "$(GREEN)$@ を生成しました。$(RESET)"
 
 # ---------------------------------------------------
 # 共有ライブラリ用
@@ -128,6 +137,7 @@ lib: $(SHARED_LIB)
 $(SHARED_LIB): $(LIB_OBJS)
 	@mkdir -p $(LIB_DIR)
 	$(CC) -shared -o $@ $^
+	@echo -e "$(GREEN)$@ を生成しました。$(RESET)"
 
 # 共有ライブラリ用のオブジェクトファイルの生成
 $(LIB_OBJ_DIR)/%.o: $(LIB_SRC_DIR)/%.c
@@ -141,16 +151,19 @@ test: $(UT_EXES)
 	@mkdir -p $(UT_REPORT_DIR)
 	@for exe in $(UT_EXES); do \
 		exe_name=$$(basename $$exe); \
-		echo "Running $$exe"; \
+		echo -e "$(YELLOW)----------------------------------------$(RESET)"; \
+		echo -e "$(YELLOW)exec $$exe $(RESET)"; \
+		echo -e "$(YELLOW)----------------------------------------$(RESET)"; \
 		$$exe --gtest_output=json:$(UT_REPORT_DIR)/$$exe_name.json; \
 		python test/tool/gtest_json_to_csv.py $(UT_REPORT_DIR)/$$exe_name.json $(UT_REPORT_DIR)/$$exe_name tsv; \
+		echo ""; \
 	done
 	@echo "カバレッジ情報 ----------------------"
 	@lcov -q -d $(UT_OBJ_DIR) -c --rc lcov_branch_coverage=1 -o $(UT_REPORT_DIR)/lcov.info
 	@lcov -q --remove $(UT_REPORT_DIR)/lcov.info '/usr/*' '*/gtest/*' '*/test/tests/*' --rc lcov_branch_coverage=1 -o $(UT_REPORT_DIR)/CoreCoverage.info
 	@lcov -q --list $(UT_REPORT_DIR)/CoreCoverage.info --rc lcov_branch_coverage=1
 	@genhtml -q $(UT_REPORT_DIR)/CoreCoverage.info --branch-coverage -o $(UT_REPORT_DIR)/coverage
-	@echo "カバレッジ情報(html)を出力しました。 $(UT_REPORT_DIR)/coverage/index.html"
+	@echo "カバレッジ情報(html)を出力しました : $(UT_REPORT_DIR)/coverage/index.html"
 .PHONY: test
 
 test_build: $(UT_EXES)
@@ -170,16 +183,16 @@ test_list: $(UT_EXES)
 
 # UT用の実行ファイルの生成
 $(UT_BIN_DIR)/test_%: $(UT_OBJ_DIR)/test_%.o $(UT_UTIL_OBJS)
-	echo $(UT_UTIL_OBJS)
-	@if [[ ! -f $(UT_FW_DIR)/lib64/libgtest.a ]]; then \
-		echo "GoogleTestがセットアップされていません。make setup_testを実行してください。"; \
-		exit 1; \
-	fi
 	@mkdir -p $(UT_BIN_DIR)
 	$(CXX) -o $@ $^ $(UT_LDFLAGS)
+	@echo -e "$(GREEN)$@ を生成しました。$(RESET)"
 
 # UT用のオブジェクトファイルの生成
 $(UT_OBJ_DIR)/%.o: $(UT_SRC_DIR)/%.cpp 
+	@if [[ ! -f $(UT_FW_DIR)/lib64/libgtest.a ]]; then \
+		echo -e "$(RED)GoogleTestがセットアップされていません。make setup_testを実行してください。$(RESET)"; \
+		exit 1; \
+	fi
 	@mkdir -p $(UT_OBJ_DIR)
 	$(CXX) $(UT_CFLAGS) -c $< -o $@ -DUNIT_TEST -I$(UT_FW_DIR)/include -I$(SRC_DIR) -I$(LIB_SRC_DIR)
 
@@ -198,7 +211,7 @@ setup_test:
 		cd ../.. && rm -rf googletest-1.16.0
 	@cd $(UT_FW_DIR) && \
 		curl -L https://github.com/meekrosoft/fff/releases/download/v1.1/fff.h -o include/fff.h
-	@echo "GoogleTestとFFFのセットアップが完了しました。"
+	@echo -e "$(GREEN)GoogleTestとFFFのセットアップが完了しました。$(RESET)"
 .PHONY: setup_test
 
 # ---------------------------------------------------
@@ -212,6 +225,5 @@ $(STUB_OBJ_DIR)/%.o: $(STUB_SRC_DIR)/%.c
 # ---------------------------------------------------
 # クリーンアップ
 clean:
-	# find ./build -type f -delete
 	rm -rf ./build/*
 .PHONY: clean
