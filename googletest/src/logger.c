@@ -78,11 +78,9 @@ void *log_thread_func(void *arg) {
                 log_file = LOG_FILE_DEBUG;
                 break;
             case LOG_TYPE_ERROR:
+            default:
                 log_file = LOG_FILE_ERROR;
                 break;
-            default:
-                free_wrapped(msg);
-                continue;
         }
 
         // Check the size of the log file
@@ -148,6 +146,7 @@ void log_message(LogType type, const char *format, ...) {
 }
 
 void start_log_thread() {
+    log_thread_running = 1;
     pthread_create(&log_thread, NULL, log_thread_func, NULL);
     printf("Log thread started.\n");
 }

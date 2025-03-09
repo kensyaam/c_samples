@@ -174,10 +174,10 @@ test_build: $(UT_EXES)
 .PHONY: test_build
 
 test_list: $(UT_EXES)
-	@#echo "UT_OBJS: $(UT_OBJS)" | sed -E 's/ +/\n/g'
-	@#echo "UT_TARGET_OBJS: $(UT_TARGET_OBJS)" | sed -E 's/ +/\n/g'
-	@#echo "UT_UTIL_OBJS: $(UT_UTIL_OBJS)" | sed -E 's/ +/\n/g'
-	@#echo "UT_EXES: $(UT_EXES)" | sed -E 's/ +/\n/g'
+	@echo "UT_OBJS: $(UT_OBJS)" | sed -E 's/ +/\n/g'
+	@echo "UT_TARGET_OBJS: $(UT_TARGET_OBJS)" | sed -E 's/ +/\n/g'
+	@echo "UT_UTIL_OBJS: $(UT_UTIL_OBJS)" | sed -E 's/ +/\n/g'
+	@echo "UT_EXES: $(UT_EXES)" | sed -E 's/ +/\n/g'
 	@for exe in $(UT_EXES); do \
 		exe_name=$$(basename $$exe); \
 		echo "$$exe_name"; \
