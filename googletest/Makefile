@@ -29,16 +29,20 @@ STUB_OBJ_DIR   = build/stub_obj
 CC = gcc
 CXX = g++
 
+# サニタイザフラグ
+#    dnf install libasan libubsan しておく必要あり
+SANITIZE_FLAGS = -fsanitize=undefined,address
+
 # コンパイルオプション (-I<dir>で検索場所追加)
-CFLAGS = -Wall -Wextra -O2
+CFLAGS = -Wall -Wextra -O0 $(SANITIZE_FLAGS)
 # 自作ライブラリを使う場合
 # CFLAGS += -I$(LIB_SRC_DIR)
 
 # ライブラリリンクオプション (-L<dir>で検索場所追加)
-#   「-Wl,-rpath=build/lib」を付けない場合は、実行時にLD_LIBRARY_PATHを設定する必要がある
-LDFLAGS = -lpthread
+#   「-Wl,-rpath,'$$(ORIGIN)'/build/lib」を付けない場合は、実行時にLD_LIBRARY_PATHを設定する必要がある
+LDFLAGS = -lpthread $(SANITIZE_FLAGS)
 # 自作ライブラリを使う場合
-# LDFLAGS += -lsample -L$(LIB_DIR) -Wl,-rpath=$(LIB_DIR)
+# LDFLAGS += -lsample -L$(LIB_DIR) -Wl,-rpath,'$$(ORIGIN)'/$(LIB_DIR)
 
 # echo用のエスケープシーケンス
 RED = \033[31m
@@ -86,9 +90,9 @@ UT_UTIL_OBJS = $(filter-out $(UT_TARGET_OBJS), $(UT_OBJS))
 UT_EXES = $(patsubst $(UT_OBJ_DIR)/test_%.o, $(UT_BIN_DIR)/test_%, $(UT_TARGET_OBJS))
 
 # コンパイルオプション
-UT_CFLAGS = -coverage -g -O0
+UT_CFLAGS = -coverage -g -O0 $(SANITIZE_FLAGS)
 # リンクオプション
-UT_LDFLAGS = -lpthread -lgtest -lgtest_main -L$(UT_FW_DIR)/lib64 -Wl,-rpath=$(UT_FW_DIR)/lib64 -lgcov
+UT_LDFLAGS = -lpthread -lgtest -lgtest_main -L$(UT_FW_DIR)/lib64 -Wl,-rpath,'$$(ORIGIN)'/$(UT_FW_DIR)/lib64 -lgcov $(SANITIZE_FLAGS)
 
 # ---------------------------------------------------
 # スタブ用
@@ -184,8 +188,12 @@ test_list: $(UT_EXES)
 # UT用の実行ファイルの生成
 $(UT_BIN_DIR)/test_%: $(UT_OBJ_DIR)/test_%.o $(UT_UTIL_OBJS)
 	@mkdir -p $(UT_BIN_DIR)
-	$(CXX) -o $@ $^ $(UT_LDFLAGS)
-	@echo -e "$(GREEN)$@ を生成しました。$(RESET)"
+	$(CXX) -o $@ $^ $(UT_LDFLAGS) || true
+	@if [[ -f $@ ]]; then \
+		echo -e "$(GREEN)$@ を生成しました。$(RESET)"; \
+	else \
+		echo -e "$(RED)$@ の生成に失敗しました。$(RESET)"; false; \
+	fi
 
 # UT用のオブジェクトファイルの生成
 $(UT_OBJ_DIR)/%.o: $(UT_SRC_DIR)/%.cpp 
