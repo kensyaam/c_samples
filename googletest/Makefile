@@ -70,8 +70,13 @@ LIB_OBJS = $(patsubst $(LIB_SRC_DIR)/%.c, $(LIB_OBJ_DIR)/%.o, $(LIB_SRCS))
 UT_SRCS = $(wildcard $(UT_SRC_DIR)/*.cpp)
 # オブジェクトファイル
 UT_OBJS = $(patsubst $(UT_SRC_DIR)/%.cpp, $(UT_OBJ_DIR)/%.o, $(UT_SRCS))
+# 実行ファイルのメインオブジェクトファイル (UT_OBJS から test_*.o のみ抽出したもの)
+UT_TARGET_OBJS = $(filter $(UT_OBJ_DIR)/test_%.o, $(UT_OBJS))
+# ユーティリティのオブジェクトファイル (UT_OBJS から test_*.o を除いたもの)
+UT_UTIL_OBJS = $(filter-out $(UT_TARGET_OBJS), $(UT_OBJS))
+
 # 実行ファイル
-UT_EXES = $(patsubst $(UT_SRC_DIR)/test_%.cpp, $(UT_BIN_DIR)/test_%, $(UT_SRCS))
+UT_EXES = $(patsubst $(UT_OBJ_DIR)/test_%.o, $(UT_BIN_DIR)/test_%, $(UT_TARGET_OBJS))
 
 # コンパイルオプション
 UT_CFLAGS = -coverage -g -O0
@@ -152,6 +157,10 @@ test_build: $(UT_EXES)
 .PHONY: test_build
 
 test_list: $(UT_EXES)
+	@#echo "UT_OBJS: $(UT_OBJS)" | sed -E 's/ +/\n/g'
+	@#echo "UT_TARGET_OBJS: $(UT_TARGET_OBJS)" | sed -E 's/ +/\n/g'
+	@#echo "UT_UTIL_OBJS: $(UT_UTIL_OBJS)" | sed -E 's/ +/\n/g'
+	@#echo "UT_EXES: $(UT_EXES)" | sed -E 's/ +/\n/g'
 	@for exe in $(UT_EXES); do \
 		exe_name=$$(basename $$exe); \
 		echo "$$exe_name"; \
@@ -160,7 +169,8 @@ test_list: $(UT_EXES)
 .PHONY: test_list
 
 # UT用の実行ファイルの生成
-$(UT_BIN_DIR)/test_%: $(UT_OBJ_DIR)/test_%.o
+$(UT_BIN_DIR)/test_%: $(UT_OBJ_DIR)/test_%.o $(UT_UTIL_OBJS)
+	echo $(UT_UTIL_OBJS)
 	@if [[ ! -f $(UT_FW_DIR)/lib64/libgtest.a ]]; then \
 		echo "GoogleTestがセットアップされていません。make setup_testを実行してください。"; \
 		exit 1; \
