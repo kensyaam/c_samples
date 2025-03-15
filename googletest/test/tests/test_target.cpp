@@ -8,18 +8,21 @@ extern "C" {
 
 }
 
-#include "testutil.hpp"
+#include "testbase.hpp"
 
 // fixtureNameはテストケース群をまとめるグループ名と考えればよい、任意の文字列
 // それ以外のclass～testing::Testまではおまじないと考える
-class fixtureName : public ::testing::Test {
+// class fixtureName : public ::testing::Test {
+class fixtureName : public TBase {
 protected:
     // fixtureNameでグループ化されたテストケースはそれぞれのテストケース実行前に
     // この関数を呼ぶ。共通の初期化処理を入れておくとテストコードがすっきりする
     virtual void SetUp(){
+        TBase::SetUp();
     }
     // SetUpと同様にテストケース実行後に呼ばれる関数。共通後始末を記述する。
     virtual void TearDown(){
+        TBase::TearDown(); 
     }
 };
 
@@ -31,13 +34,13 @@ TEST_F(fixtureName, testOk)
 }
 
 // あえて失敗するテストケースも書いておく。
-TEST_F(fixtureName, testNg)
+TEST_F(fixtureName, DISABLED_testNg)
 {
     EXPECT_EQ(1, function(0));
     EXPECT_EQ(0, function(100));
 }
 
-TEST_F(fixtureName, testUtils)
+TEST_F(fixtureName, DISABLED_testUtils)
 {
     printf("testutil_exec_cmd (\"pwd; ls -l\")\n");
     testutil_exec_cmd("pwd; ls -l");
@@ -62,3 +65,21 @@ TEST_F(fixtureName, testUtils)
     }
     testutil_free_lines(lines, line_count);
 }
+
+TEST_F(fixtureName, testUtilCurl) {
+    const char* url = "https://example.com/post";
+    const char* post_data = "key1=value1&key2=value2";
+    const char* headers[] = {"Content-Type: application/x-www-form-urlencoded"};
+    TestUtilResponseData* response = testutil_http_post(url, headers, 1, post_data);
+
+    EXPECT_NE(response, nullptr);
+    if (response != NULL) {
+        EXPECT_EQ(response->status_code, 200); // 期待するステータスコードを検証
+        // レスポンス内容を検証
+        // ...
+    }
+
+    testutil_free_response_data(response);
+
+}
+

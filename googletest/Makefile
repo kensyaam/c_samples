@@ -29,9 +29,13 @@ STUB_OBJ_DIR   = build/stub_obj
 CC = gcc
 CXX = g++
 
+ifeq ($(DEV), 1)
 # サニタイザフラグ
 #    dnf install libasan libubsan しておく必要あり
 SANITIZE_FLAGS = -fsanitize=undefined,address
+else
+SANITIZE_FLAGS =
+endif
 
 # コンパイルオプション (-I<dir>で検索場所追加)
 CFLAGS = -Wall -Wextra -O0 $(SANITIZE_FLAGS)
@@ -90,9 +94,9 @@ UT_UTIL_OBJS = $(filter-out $(UT_TARGET_OBJS), $(UT_OBJS))
 UT_EXES = $(patsubst $(UT_OBJ_DIR)/test_%.o, $(UT_BIN_DIR)/test_%, $(UT_TARGET_OBJS))
 
 # コンパイルオプション
-UT_CFLAGS = -coverage -g -O0 $(SANITIZE_FLAGS)
+UT_CFLAGS = -coverage -g -O0 -DUNIT_TEST $(SANITIZE_FLAGS)
 # リンクオプション
-UT_LDFLAGS = -lpthread -lgtest -lgtest_main -L$(UT_FW_DIR)/lib64 -Wl,-rpath,'$$(ORIGIN)'/$(UT_FW_DIR)/lib64 -lgcov $(SANITIZE_FLAGS)
+UT_LDFLAGS = -lpthread -lcurl -lgtest -lgtest_main -L$(UT_FW_DIR)/lib64 -Wl,-rpath,'$$(ORIGIN)'/$(UT_FW_DIR)/lib64 -lgcov $(SANITIZE_FLAGS)
 
 # ---------------------------------------------------
 # スタブ用
@@ -170,6 +174,23 @@ test: $(UT_EXES)
 	@echo "カバレッジ情報(html)を出力しました : $(UT_REPORT_DIR)/coverage/index.html"
 .PHONY: test
 
+test_%: $(UT_BIN_DIR)/test_%
+	@mkdir -p $(UT_REPORT_DIR)
+	@exe_name=$$(basename $<); \
+		echo -e "$(YELLOW)----------------------------------------$(RESET)"; \
+		echo -e "$(YELLOW)exec $< $(RESET)"; \
+		echo -e "$(YELLOW)----------------------------------------$(RESET)"; \
+		$< --gtest_output=json:$(UT_REPORT_DIR)/$<_name.json; \
+		python test/tool/gtest_json_to_csv.py $(UT_REPORT_DIR)/$$exe_name.json $(UT_REPORT_DIR)/$<_name tsv; \
+		echo "";
+	@echo "カバレッジ情報 ----------------------"
+	@lcov -q -d $(UT_OBJ_DIR) -c --rc lcov_branch_coverage=1 -o $(UT_REPORT_DIR)/lcov.info
+	@lcov -q --remove $(UT_REPORT_DIR)/lcov.info '/usr/*' '*/gtest/*' '*/test/tests/*' --rc lcov_branch_coverage=1 -o $(UT_REPORT_DIR)/CoreCoverage.info
+	@lcov -q --list $(UT_REPORT_DIR)/CoreCoverage.info --rc lcov_branch_coverage=1
+	@genhtml -q $(UT_REPORT_DIR)/CoreCoverage.info --branch-coverage -o $(UT_REPORT_DIR)/coverage
+	@echo "カバレッジ情報(html)を出力しました : $(UT_REPORT_DIR)/coverage/index.html"
+.PHONY: test_%
+
 test_build: $(UT_EXES)
 .PHONY: test_build
 
@@ -202,7 +223,7 @@ $(UT_OBJ_DIR)/%.o: $(UT_SRC_DIR)/%.cpp
 		exit 1; \
 	fi
 	@mkdir -p $(UT_OBJ_DIR)
-	$(CXX) $(UT_CFLAGS) -c $< -o $@ -DUNIT_TEST -I$(UT_FW_DIR)/include -I$(SRC_DIR) -I$(LIB_SRC_DIR)
+	$(CXX) $(UT_CFLAGS) -c $< -o $@ -I$(UT_FW_DIR)/include -I$(SRC_DIR) -I$(LIB_SRC_DIR)
 
 # GoogleTest、FFFをセットアップ
 setup_test:

@@ -17,16 +17,10 @@ extern "C" {
 
 #include "../../src/logger.c"
 
-DEFINE_FFF_GLOBALS;
-
-// Mock definitions
-FAKE_VALUE_FUNC(void*, malloc_wrapped, size_t);
-FAKE_VALUE_FUNC(void*, realloc_wrapped, void *, size_t);
-FAKE_VOID_FUNC(free_wrapped, void*);
 
 }
 
-#include "testutil.hpp"
+# include "testbase.hpp"
 
 // ログファイルの書き込み待ち時間
 #define FILE_FLUSH_WAIT_MSEC 300
@@ -41,24 +35,17 @@ void remove_test_logs(const char *target_log_file = LOG_FILE_INFO) {
     remove(target_log_file);
 }
 
-class LoggerTest : public ::testing::Test {
+class LoggerTest : public TBase {
 protected:
     static void SetUpTestSuite() {
+        TBase::SetUpTestSuite();
         // レポートに出力するプロパティを設定
         testing::Test::RecordProperty("target", "logger.c");
     }
 
     virtual void SetUp(){
-        RESET_FAKE(malloc_wrapped);
-        RESET_FAKE(realloc_wrapped);
-        RESET_FAKE(free_wrapped);
-        FFF_RESET_HISTORY();
-
-        //  デフォルトのmalloc, realloc, freeを使う
-        malloc_wrapped_fake.custom_fake = malloc;
-        realloc_wrapped_fake.custom_fake = realloc;
-        free_wrapped_fake.custom_fake = free;
-
+        TBase::SetUp();
+ 
         // 内部変数を初期化
         log_mutex = PTHREAD_MUTEX_INITIALIZER;
         log_cond = PTHREAD_COND_INITIALIZER;
@@ -73,6 +60,18 @@ protected:
     }
 
     virtual void TearDown(){
+        TBase::TearDown();
+
+        while (log_queue_head != NULL) {
+            printf("free log_queue_head\n");
+            LogMessage *msg = log_queue_head;
+            log_queue_head = log_queue_head->next;
+            free(msg);
+            if (log_queue_head == NULL) {
+                log_queue_tail = NULL;
+            }
+            log_queue_size--;
+        }
     }
 };
 
@@ -123,7 +122,6 @@ TEST_F(LoggerTest, LogMessageMallocFail) {
 
     // mallocが失敗するように設定
     malloc_wrapped_fake.return_val = NULL;
-
     log_message(LOG_TYPE_INFO, "Test message");
 
     ASSERT_EQ(malloc_wrapped_fake.call_count, 1);
@@ -149,11 +147,6 @@ TEST_F(LoggerTest, LogMessageSuccess) {
     ASSERT_NE(log_queue_head, nullptr);
     ASSERT_EQ(log_queue_tail, log_queue_head);
     ASSERT_STREQ(log_queue_head->message, "Test message");
-
-    free(mock_msg);
-    log_queue_head = NULL;
-    log_queue_tail = NULL;
-    log_queue_size = 0;
 }
 
 TEST_F(LoggerTest, LogMessageMultipleMessages) {
@@ -179,12 +172,6 @@ TEST_F(LoggerTest, LogMessageMultipleMessages) {
     ASSERT_NE(log_queue_tail, nullptr);
     ASSERT_STREQ(log_queue_head->message, "First message");
     ASSERT_STREQ(log_queue_tail->message, "Second message");
-
-    free(mock_msg1);
-    free(mock_msg2);
-    log_queue_head = NULL;
-    log_queue_tail = NULL;
-    log_queue_size = 0;
 }
 
 TEST_F(LoggerTest, LogMessageTypeDebugError) {
@@ -233,7 +220,6 @@ TEST_F(LoggerTest, LogThreadFunc) {
 
     // malloc, free を完全にモック化
     malloc_wrapped_fake.custom_fake = NULL;
-    free_wrapped_fake.custom_fake = NULL;
 
     pthread_t thread;
 
@@ -285,10 +271,6 @@ TEST_F(LoggerTest, LogThreadFunc) {
     log_thread_running = 0;
     pthread_cond_signal(&log_cond);
     pthread_join(thread, NULL);
-
-    free(mock_msg1);
-    free(mock_msg2);
-    free(mock_msg3);
 }
 
 
