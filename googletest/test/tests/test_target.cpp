@@ -25,7 +25,7 @@ protected:
         TBase::TearDown(); 
     }
 };
-
+    
 // 成功するテストケース。細かい説明はGoogleTestのマニュアルを見てね。
 TEST_F(fixtureName, testOk)
 {

@@ -281,7 +281,7 @@ protected:
 
     // HTTPリクエスト関数
     TestUtilResponseData* testutil_http_request(const char* method, const char* url, 
-            const char* headers[], size_t header_count, 
+            const char** headers, size_t header_count, 
             const char* data = NULL, const char* http_version = "1.1") {
         curl_global_init(CURL_GLOBAL_ALL);
         CURL* curl = curl_easy_init();
@@ -335,8 +335,9 @@ protected:
         if (header_list != NULL) {
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list);
         }
-    
+
         if (data != NULL && !contains_content_length) {
+            printf("data: %s, len: %d\n", data, (int)strlen(data));
             curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(data)); // Content-Length自動設定
         }
     
