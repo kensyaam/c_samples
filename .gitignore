@@ -55,3 +55,4 @@ build/
 *.log
 *.info
 */test/fw/
+tmp/

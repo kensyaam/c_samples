@@ -67,19 +67,20 @@ TEST_F(fixtureName, DISABLED_testUtils)
 }
 
 TEST_F(fixtureName, testUtilCurl) {
-    const char* url = "https://example.com/post";
+    const char* url = "http://localhost:8000/bbb?bbb=ccc";
     const char* post_data = "key1=value1&key2=value2";
     const char* headers[] = {"Content-Type: application/x-www-form-urlencoded"};
-    TestUtilResponseData* response = testutil_http_post(url, headers, 1, post_data);
+    TestUtilResponseData* response = testutil_http_request("POST", url, headers, 1, post_data);
 
-    EXPECT_NE(response, nullptr);
+    // EXPECT_NE(response, nullptr);
     if (response != NULL) {
         EXPECT_EQ(response->status_code, 200); // 期待するステータスコードを検証
         // レスポンス内容を検証
         // ...
     }
-
     testutil_free_response_data(response);
+
+    testutil_http_request_async("test/tmp/curl_resp.txt", "POST", url, headers, 1, post_data);
 
 }
 

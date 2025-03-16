@@ -97,14 +97,14 @@ protected:
     }
 
     // コマンド実行 - 別プロセスで実行し、標準出力をファイルに保存
-    void testutil_exec_cmd_async(const char *cmd, char *output_path) {
+    void testutil_exec_cmd_async(const char *cmd, const char *output_path = NULL) {
         // forkして子プロセスでcmdで指定されたコマンドを実行する。
         // コマンドの標準出力をoutput_pathで指定されたファイルに保存する。
         pid_t pid = fork();
         if (pid == 0) {
             // 子プロセス
             char *output = testutil_exec_cmd_and_read_output(cmd, NULL);
-            if (output != NULL) {
+            if (output != NULL && output_path != NULL) {
                 FILE *file = fopen(output_path, "w");
                 if (file != NULL) {
                     fprintf(file, "%s", output);
@@ -259,7 +259,7 @@ protected:
     // curl
     // ---------------------------------------------------
     // レスポンスデータを格納する構造体
-    typedef struct {
+    typedef struct TestUtilResponseData {
         char* data;
         size_t size;
         int status_code;
@@ -279,62 +279,50 @@ protected:
         return real_size;
     }
 
-    // HTTP GETリクエスト関数
-    TestUtilResponseData* testutil_http_get(const char* url, const char* headers[], size_t header_count) {
+    // HTTPリクエスト関数
+    TestUtilResponseData* testutil_http_request(const char* method, const char* url, 
+            const char* headers[], size_t header_count, 
+            const char* data = NULL, const char* http_version = "1.1") {
+        curl_global_init(CURL_GLOBAL_ALL);
         CURL* curl = curl_easy_init();
         if (curl == NULL) {
             return NULL;
         }
-
-        TestUtilResponseData* response = (TestUtilResponseData*)malloc(sizeof(TestUtilResponseData));
+    
+        TestUtilResponseData *response = (TestUtilResponseData *)malloc(sizeof(TestUtilResponseData));
         response->data = NULL;
         response->size = 0;
         response->status_code = 0;
-
+    
         curl_easy_setopt(curl, CURLOPT_URL, url);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, testutil_write_callback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)response);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)response);
+    
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0); // SSL証明書検証を無効化
+        // curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L); // デバッグ情報出力
 
-        // ヘッダー設定
-        struct curl_slist* header_list = NULL;
-        for (size_t i = 0; i < header_count; i++) {
-            header_list = curl_slist_append(header_list, headers[i]);
+        // HTTPメソッド設定
+        if (strcmp(method, "POST") == 0) {
+            curl_easy_setopt(curl, CURLOPT_POST, 1L);
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+        } else if (strcmp(method, "PUT") == 0) {
+            curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, data);
+        } else if (strcmp(method, "DELETE") == 0) {
+            curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
+        } else {
+            curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method);
         }
-        if (header_list != NULL) {
-            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list);
-            curl_slist_free_all(header_list);
+    
+        // HTTPバージョン設定
+        if (strcmp(http_version, "1.0") == 0) {
+            curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_0);
+        } else if (strcmp(http_version, "1.1") == 0) {
+            curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+        } else if (strcmp(http_version, "2.0") == 0) {
+            curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
         }
-
-        CURLcode res = curl_easy_perform(curl);
-        if (res != CURLE_OK) {
-            free(response->data);
-            free(response);
-            response = NULL;
-        }
-
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response->status_code); // ステータスコード取得
-        curl_easy_cleanup(curl);
-        return response;
-    }
-
-    // HTTP POSTリクエスト関数 (Content-Length自動設定、ステータスコード取得)
-    TestUtilResponseData* testutil_http_post(const char* url, const char* headers[], size_t header_count, const char* post_data) {
-        CURL* curl = curl_easy_init();
-        if (curl == NULL) {
-            return NULL;
-        }
-
-        TestUtilResponseData* response = (TestUtilResponseData*)malloc(sizeof(TestUtilResponseData));
-        response->data = NULL;
-        response->size = 0;
-        response->status_code = 0;
-
-        curl_easy_setopt(curl, CURLOPT_URL, url);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, testutil_write_callback);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)response);
-        curl_easy_setopt(curl, CURLOPT_POST, 1L);
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, post_data);
-
+    
         // ヘッダー設定
         struct curl_slist* header_list = NULL;
         bool contains_content_length = false;
@@ -347,24 +335,26 @@ protected:
         if (header_list != NULL) {
             curl_easy_setopt(curl, CURLOPT_HTTPHEADER, header_list);
         }
-
-        if (!contains_content_length) {
-            curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(post_data)); // Content-Length自動設定
+    
+        if (data != NULL && !contains_content_length) {
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)strlen(data)); // Content-Length自動設定
         }
-
+    
         CURLcode res = curl_easy_perform(curl);
-
+    
         if (res != CURLE_OK) {
             free(response->data);
             free(response);
-            curl_easy_cleanup(curl);
-            curl_slist_free_all(header_list);
-            return NULL;
+            response = NULL;
         }
-
+    
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response->status_code); // ステータスコード取得
+
+    cleanup:
         curl_easy_cleanup(curl);
         curl_slist_free_all(header_list);
+        curl_global_cleanup();
+
         return response;
     }
 
@@ -376,6 +366,30 @@ protected:
         }
     }
 
+    // HTTPリクエスト関数 - 別プロセスで実行し、結果をファイルに保存(1行目: ステータスコード, 2行目以降: レスポンスデータ)
+    void testutil_http_request_async(const char *output_path, const char* method, const char* url, 
+        const char* headers[], size_t header_count, 
+        const char* data = NULL, const char* http_version = "1.1") {
+        // forkして子プロセスでcmdで指定されたコマンドを実行する。
+        // コマンドの標準出力をoutput_pathで指定されたファイルに保存する。
+        pid_t pid = fork();
+        if (pid == 0) {
+            // 子プロセス
+            TestUtilResponseData *resp = testutil_http_request(method, url, headers, header_count, data, http_version);
+            if (resp != NULL && output_path != NULL) {
+                FILE *file = fopen(output_path, "w");
+                if (file != NULL) {
+                    fprintf(file, "%d\n", resp->status_code);
+                    fprintf(file, "%s", resp->data);
+                    fclose(file);
+                }
+                free(resp);
+            }
+            exit(0);
+        } else {
+            // 親プロセス
+        }
+    }
 
 };
 
